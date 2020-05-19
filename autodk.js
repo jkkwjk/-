@@ -65,7 +65,7 @@
         })
     }
 
-    async function getThemeId() {
+    async function getThemeId(cnt) {
         token = await gettoken()
         const httpTransport = require("https")
         const responseEncoding = "utf8"
@@ -104,7 +104,7 @@
 
                             const obj = JSON.parse(responseStr)
                                 // console.log(obj.data.token)
-                            resolve(obj.data[0].id)
+                            resolve(obj.data[cnt].id)
                         })
                 })
                 .setTimeout(0)
@@ -116,8 +116,8 @@
         })
     }
 
-    async function getGroupID() {
-        let themeId = await getThemeId()
+    async function getGroupID(cnt = 0) {
+        let themeId = await getThemeId(cnt)
         const httpTransport = require("https")
         const responseEncoding = "utf8"
         const httpOptions = {
@@ -235,9 +235,65 @@
         )
         request.end()
     }
-    autodk()
-    let job = schedule.scheduleJob("00 01 00 * * *", () => {
+
+    async function autodkTemperature(cnt) {
+        let group = await getGroupID(cnt)
+        let groupid = group[0]
+        let bizType = group[1] // toFixed 两次打开都是D01 ?
+        
+        const httpTransport = require("https")
+        const responseEncoding = "utf8"
+        const httpOptions = {
+            hostname: "pa.pkqa.com.cn",
+            port: "443",
+            path: "/dapi/v2/form/daily_check_in_service/save_form_input",
+            method: "POST",
+            headers: {
+                Authorization: "Bearer " + token,
+                "Content-Type": "application/json; charset=utf-8",
+            },
+        }
+
+        const request = httpTransport
+            .request(httpOptions, (res) => {
+                let responseBufs = []
+                let responseStr = ""
+
+                res
+                    .on("data", (chunk) => {
+                        if (Buffer.isBuffer(chunk)) {
+                            responseBufs.push(chunk)
+                        } else {
+                            responseStr = responseStr + chunk
+                        }
+                    })
+                    .on("end", () => {
+                        responseStr =
+                            responseBufs.length > 0 ?
+                            Buffer.concat(responseBufs).toString(responseEncoding) :
+                            responseStr
+                        console.log(studentId + " -> " + new Date() + " -> " + responseStr)
+                            // callback(null, res.statusCode, res.headers, responseStr)
+                    })
+            })
+            .setTimeout(0)
+            .on("error", (error) => {
+                callback(error)
+            })
+        const payload = `{"bizType":"${bizType}","groupid":"${groupid}","value":{"color":"green","temperature":"${temperature}","cough":"not","dormitoryCough":["no"]}}`
+        console.log(payload)
+        request.write(payload)
+        request.end()
         temperature = (Math.random() * (37 - 36) + 36).toFixed(1)
-        autodk()
+    }
+    //autodk()
+    autodkTemperature(0)
+    autodkTemperature(1)
+    let job1 = schedule.scheduleJob("00 23 08 * * *", () => { //8:23打第一次体温
+        autodkTemperature(0)
     })
+    let job2 = schedule.scheduleJob("00 06 16 * * *", () => { //16:06打第二次体温
+        autodkTemperature(1)
+    })
+
 })()
