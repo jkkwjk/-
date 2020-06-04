@@ -151,7 +151,11 @@
                                 Buffer.concat(responseBufs).toString(responseEncoding) :
                                 responseStr
                             const obj = JSON.parse(responseStr)
-                            resolve([obj.data.group.id, obj.data.group.bizType])
+                            if (obj.data === null){
+                                resolve([0, 0]) // 未到打卡时间
+                            }else {
+                                resolve([obj.data.group.id, obj.data.group.bizType])
+                            }
                         })
                 })
                 .setTimeout(0)
@@ -238,8 +242,12 @@
 
     async function autodkTemperature(cnt) {
         let group = await getGroupID(cnt)
+        if (group[0] === 0){
+            console.log(cnt + ": 未到打卡时间")
+            return
+        }
         let groupid = group[0]
-        let bizType = group[1] // toFixed 两次打开都是D01 ?
+        let bizType = group[1] // 第一次是D02 第二次是D01
         
         const httpTransport = require("https")
         const responseEncoding = "utf8"
@@ -280,7 +288,13 @@
             .on("error", (error) => {
                 callback(error)
             })
-        const payload = `{"bizType":"${bizType}","groupid":"${groupid}","value":{"color":"green","temperature":"${temperature}","cough":"not","dormitoryCough":["no"]}}`
+        let payload = ''
+        if (bizType === 'D02') {
+            payload = `{"bizType":"${bizType}","groupid":"${groupid}","value":{"color":"green","temperature":"${temperature}","temperatureYesterday": "${temperature}","cough":"not","dormitoryCough":["no"]}}`
+        }else {
+            payload = `{"bizType":"${bizType}","groupid":"${groupid}","value":{"color":"green","temperature":"${temperature}","cough":"not","dormitoryCough":["no"]}}`
+        }
+        
         console.log(payload)
         request.write(payload)
         request.end()
