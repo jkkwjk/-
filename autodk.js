@@ -3,16 +3,16 @@
     "use strict"
     const schedule = require("node-schedule")
 
-    const appCode = "" //这里是学校，根据sid来
-    const studentId = "" //学号
-    const password = "" //密码
+    const appCode = "3" //这里是学校，根据sid来
+    const studentId = [] //学号
+    const password = [] //密码
     const province = "" //省（中文）
     const city = "" //市（中文）
     const district = "" //区（中文）
     let token = ""
     let temperature = (Math.random() * (37 - 36) + 36).toFixed(1)
 
-    async function gettoken() {
+    async function gettoken(name, pwd) {
         const httpTransport = require("https")
         const responseEncoding = "utf8"
         const httpOptions = {
@@ -56,17 +56,17 @@
                 })
             request.write(
                 '{"loginName":"' +
-                studentId +
+                name +
                 '","password":"' +
-                password +
+                pwd +
                 '","type":"account"}'
             )
             request.end()
         })
     }
 
-    async function getThemeId(cnt) {
-        token = await gettoken()
+    async function getThemeId(cnt, name, pwd) {
+        token = await gettoken(name,pwd)
         const httpTransport = require("https")
         const responseEncoding = "utf8"
         const httpOptions = {
@@ -116,8 +116,8 @@
         })
     }
 
-    async function getGroupID(cnt = 0) {
-        let themeId = await getThemeId(cnt)
+    async function getGroupID(cnt = 0, name, pwd) {
+        let themeId = await getThemeId(cnt, name, pwd)
         const httpTransport = require("https")
         const responseEncoding = "utf8"
         const httpOptions = {
@@ -169,6 +169,7 @@
         })
     }
 
+    // 不是体温打卡 没改
     async function autodk() {
         let group = await getGroupID()
         let groupid = group[0]
@@ -240,8 +241,8 @@
         request.end()
     }
 
-    async function autodkTemperature(cnt) {
-        let group = await getGroupID(cnt)
+    async function autodkTemperature(cnt, name, pwd) {
+        let group = await getGroupID(cnt, name, pwd)
         if (group[0] === 0){
             console.log(cnt + ": 未到打卡时间")
             return
@@ -280,7 +281,7 @@
                             responseBufs.length > 0 ?
                             Buffer.concat(responseBufs).toString(responseEncoding) :
                             responseStr
-                        console.log(studentId + " -> " + new Date() + " -> " + responseStr)
+                        console.log(name + " -> " + new Date() + " -> " + responseStr)
                             // callback(null, res.statusCode, res.headers, responseStr)
                     })
             })
@@ -301,13 +302,25 @@
         temperature = (Math.random() * (37 - 36) + 36).toFixed(1)
     }
     //autodk()
-    autodkTemperature(0)
-    autodkTemperature(1)
+    for (let i=0; i<studentId.length; ++i){
+        setTimeout(()=>{
+            autodkTemperature(0,studentId[i],password[i]);
+            autodkTemperature(1,studentId[i],password[i]);
+        },i*1000);
+    }
     let job1 = schedule.scheduleJob("00 23 08 * * *", () => { //8:23打第一次体温
-        autodkTemperature(0)
+        for (let i=0; i<studentId.length; ++i){
+            setTimeout(()=>{
+                autodkTemperature(0,studentId[i],password[i]);
+            },i*1000);
+        }
     })
     let job2 = schedule.scheduleJob("00 06 16 * * *", () => { //16:06打第二次体温
-        autodkTemperature(1)
+        for (let i=0; i<studentId.length; ++i){
+            setTimeout(()=>{
+                autodkTemperature(1,studentId[i],password[i]);
+            },i*1000);
+        }
     })
 
 })()
