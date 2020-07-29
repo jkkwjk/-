@@ -1,326 +1,108 @@
-// request Request
-(function(callback) {
-    "use strict"
-    const schedule = require("node-schedule")
+const schedule = require("node-schedule")
+const service = require("./commonService")
+const http = require("http");
 
-    const appCode = "3" //这里是学校，根据sid来
-    const studentId = [] //学号
-    const password = [] //密码
-    const province = "" //省（中文）
-    const city = "" //市（中文）
-    const district = "" //区（中文）
-    let token = ""
-    let temperature = (Math.random() * (37 - 36) + 36).toFixed(1)
+const appCode = "3" //这里是学校，根据sid来
+const person = [
+    
+] // { id: "xxx", pwd: "xxx", location: ["xxx", "xxx", "xxx"] }
+// let temperature = (Math.random() * (37 - 36) + 36).toFixed(1)
 
-    async function gettoken(name, pwd) {
-        const httpTransport = require("https")
-        const responseEncoding = "utf8"
-        const httpOptions = {
-            hostname: "pa.pkqa.com.cn",
-            port: "443",
-            path: "/dapi/v2/account/account_service/login",
-            method: "POST",
-            headers: {
-                "App-Code": appCode,
-                "Content-Type": "application/json; charset=utf-8",
-            },
-        }
-        httpOptions.headers["User-Agent"] = "node " + process.version
-        return new Promise((resolve, reject) => {
-            const request = httpTransport
-                .request(httpOptions, (res) => {
-                    let responseBufs = []
-                    let responseStr = ""
+//200 成功
+//513 有字段为空
+//514 重复交提
+//600 未到打卡时间
+async function autodk(id, pwd, location) {
+    const token = await service.gettoken(appCode, id, pwd);
+    const themeId = await service.getThemeId(token, 0);
+    const group = await service.getGroup(token, themeId);
 
-                    res
-                        .on("data", (chunk) => {
-                            if (Buffer.isBuffer(chunk)) {
-                                responseBufs.push(chunk)
-                            } else {
-                                responseStr = responseStr + chunk
-                            }
-                        })
-                        .on("end", () => {
-                            responseStr =
-                                responseBufs.length > 0 ?
-                                Buffer.concat(responseBufs).toString(responseEncoding) :
-                                responseStr
-                            const obj = JSON.parse(responseStr)
-                                // console.log(obj.data.token)
-                            resolve(obj.data.token)
-                        })
-                })
-                .setTimeout(0)
-                .on("error", (error) => {
-                    reject(error)
-                })
-            request.write(
-                '{"loginName":"' +
-                name +
-                '","password":"' +
-                pwd +
-                '","type":"account"}'
-            )
-            request.end()
-        })
-    }
-
-    async function getThemeId(cnt, name, pwd) {
-        token = await gettoken(name,pwd)
-        const httpTransport = require("https")
-        const responseEncoding = "utf8"
-        const httpOptions = {
-            hostname: "pa.pkqa.com.cn",
-            port: "443",
-            path: "/dapi/v2/form/daily_check_in_service/find_all_valid_themes_with_self",
-            method: "POST",
-            headers: {
-                Authorization: "Bearer " + token,
-                "Content-Type": "application/json; charset=utf-8",
-            },
-        }
-        httpOptions.headers["User-Agent"] = "node " + process.version
-
-        // Paw Store Cookies option is not supported
-        return new Promise((resolve, reject) => {
-            const request = httpTransport
-                .request(httpOptions, (res) => {
-                    let responseBufs = []
-                    let responseStr = ""
-
-                    res
-                        .on("data", (chunk) => {
-                            if (Buffer.isBuffer(chunk)) {
-                                responseBufs.push(chunk)
-                            } else {
-                                responseStr = responseStr + chunk
-                            }
-                        })
-                        .on("end", () => {
-                            responseStr =
-                                responseBufs.length > 0 ?
-                                Buffer.concat(responseBufs).toString(responseEncoding) :
-                                responseStr
-
-                            const obj = JSON.parse(responseStr)
-                                // console.log(obj.data.token)
-                            resolve(obj.data[cnt].id)
-                        })
-                })
-                .setTimeout(0)
-                .on("error", (error) => {
-                    reject(error)
-                })
-            request.write("{}")
-            request.end()
-        })
-    }
-
-    async function getGroupID(cnt = 0, name, pwd) {
-        let themeId = await getThemeId(cnt, name, pwd)
-        const httpTransport = require("https")
-        const responseEncoding = "utf8"
-        const httpOptions = {
-            hostname: "pa.pkqa.com.cn",
-            port: "443",
-            path: "/dapi/v2/form/daily_check_in_service/find_item_by_theme_id_and_date_with_self",
-            method: "POST",
-            headers: {
-                Authorization: "Bearer " + token,
-                "Content-Type": "application/json; charset=utf-8",
-            },
-        }
-        httpOptions.headers["User-Agent"] = "node " + process.version
-        return new Promise((resolve, reject) => {
-            const request = httpTransport
-                .request(httpOptions, (res) => {
-                    let responseBufs = []
-                    let responseStr = ""
-
-                    res
-                        .on("data", (chunk) => {
-                            if (Buffer.isBuffer(chunk)) {
-                                responseBufs.push(chunk)
-                            } else {
-                                responseStr = responseStr + chunk
-                            }
-                        })
-                        .on("end", () => {
-                            responseStr =
-                                responseBufs.length > 0 ?
-                                Buffer.concat(responseBufs).toString(responseEncoding) :
-                                responseStr
-                            const obj = JSON.parse(responseStr)
-                            if (obj.data === null){
-                                resolve([0, 0]) // 未到打卡时间
-                            }else {
-                                resolve([obj.data.group.id, obj.data.group.bizType])
-                            }
-                        })
-                })
-                .setTimeout(0)
-                .on("error", (error) => {
-                    reject(error)
-                })
-            request.write(
-                '{"themeId":"' + themeId + '","date":' + new Date().getTime() + "}"
-            )
-            request.end()
-        })
-    }
-
-    // 不是体温打卡 没改
-    async function autodk() {
-        let group = await getGroupID()
-        let groupid = group[0]
-        let bizType = group[1]
-        const httpTransport = require("https")
-        const responseEncoding = "utf8"
-        const httpOptions = {
-            hostname: "pa.pkqa.com.cn",
-            port: "443",
-            path: "/dapi/v2/autoform/autoform_service/save_form_input",
-            method: "POST",
-            headers: {
-                Authorization: "Bearer " + token,
-                "Content-Type": "application/json; charset=utf-8",
-            },
-        }
-        httpOptions.headers["User-Agent"] = "node " + process.version
-
-        const request = httpTransport
-            .request(httpOptions, (res) => {
-                let responseBufs = []
-                let responseStr = ""
-
-                res
-                    .on("data", (chunk) => {
-                        if (Buffer.isBuffer(chunk)) {
-                            responseBufs.push(chunk)
-                        } else {
-                            responseStr = responseStr + chunk
-                        }
-                    })
-                    .on("end", () => {
-                        responseStr =
-                            responseBufs.length > 0 ?
-                            Buffer.concat(responseBufs).toString(responseEncoding) :
-                            responseStr
-                        console.log(studentId + " -> " + new Date() + " -> " + responseStr)
-                            // callback(null, res.statusCode, res.headers, responseStr)
-                    })
-            })
-            .setTimeout(0)
-            .on("error", (error) => {
-                callback(error)
-            })
-        request.write(
-            '{"bizType":"' +
-            bizType +
-            '","groupid":"' +
-            groupid +
-            '","value":[{"location":["' +
-            province +
-            '","' +
-            city +
-            '","' +
-            district +
-            '"],"whatColorIsYourHangzhouHealthCode":"greenCode",' +
-            '"inWenzhouHuangyanWenlingOrPassOrContactPersonsFromTheAboveAreas":"no",' +
-            '"inHubeiOrPassOrComeIntoContactWithPeopleFromHubei":"no",' +
-            '"closeContactWithConfirmedOrSuspectedCases":"no",' +
-            '"currentLifeSituation":"normalHome",' +
-            '"currentHealthCondition":"beInGoodHealth",' +
-            '"whetheryouhavestayedinheilongjiang":"no",' +
-            '"togetherCurrentHealthCondition":"beInGoodHealth",' +
-            '"whatColorIsYourTogetherHangzhouHealthCode":"greenCode",' +
-            '"temperature":"' +
-            temperature +
-            '"}]}'
-        )
-        request.end()
-    }
-
-    async function autodkTemperature(cnt, name, pwd) {
-        let group = await getGroupID(cnt, name, pwd)
-        if (group[0] === 0){
-            console.log(cnt + ": 未到打卡时间")
-            return
-        }
-        let groupid = group[0]
-        let bizType = group[1] // 第一次是D02 第二次是D01
-        
-        const httpTransport = require("https")
-        const responseEncoding = "utf8"
-        const httpOptions = {
-            hostname: "pa.pkqa.com.cn",
-            port: "443",
-            path: "/dapi/v2/form/daily_check_in_service/save_form_input",
-            method: "POST",
-            headers: {
-                Authorization: "Bearer " + token,
-                "Content-Type": "application/json; charset=utf-8",
-            },
-        }
-
-        const request = httpTransport
-            .request(httpOptions, (res) => {
-                let responseBufs = []
-                let responseStr = ""
-
-                res
-                    .on("data", (chunk) => {
-                        if (Buffer.isBuffer(chunk)) {
-                            responseBufs.push(chunk)
-                        } else {
-                            responseStr = responseStr + chunk
-                        }
-                    })
-                    .on("end", () => {
-                        responseStr =
-                            responseBufs.length > 0 ?
-                            Buffer.concat(responseBufs).toString(responseEncoding) :
-                            responseStr
-                        console.log(name + " -> " + new Date() + " -> " + responseStr)
-                            // callback(null, res.statusCode, res.headers, responseStr)
-                    })
-            })
-            .setTimeout(0)
-            .on("error", (error) => {
-                callback(error)
-            })
-        let payload = ''
-        if (bizType === 'D02') {
-            payload = `{"bizType":"${bizType}","groupid":"${groupid}","value":{"color":"green","temperature":"${temperature}","temperatureYesterday": "${temperature}","cough":"not","dormitoryCough":["no"]}}`
+    return new Promise((r, j) => {
+        if (group === {}) {
+            r(600)
         }else {
-            payload = `{"bizType":"${bizType}","groupid":"${groupid}","value":{"color":"green","temperature":"${temperature}","cough":"not","dormitoryCough":["no"]}}`
+            const httpOptions = {
+                hostname: "pa.pkqa.com.cn",
+                port: "443",
+                path: "/dapi/v2/form/daily_check_in_service/save_form_input",
+                method: "POST",
+                headers: {
+                    Authorization: "Bearer " + token,
+                    "Content-Type": "application/json; charset=utf-8",
+                },
+            }
+        
+            const payload = `{"bizType":"${group.bizType}","groupid":"${group.id}","value":{"whatColorIsYourHangzhouHealthCode":"greenCode","currentHealthCondition":"no","location":["${location[0]}","${location[1]}","${location[2]}"],"everBeenToInAHighRiskArea":"no"}}`
+            
+            service.easyHttpTransport(
+                httpOptions, 
+                payload
+            ).then(res => {
+                r(res.code)
+            }).catch(j);
+        }
+    })
+}
+
+async function sendMessage(){
+    return new Promise((r, j) => {
+        const httpOptions = {
+            hostname: "xx",
+            port: "8080",
+            path: "/api/sendSms",
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+            }
+        }
+        const request = http.request(httpOptions, res => {
+            let responseBufs = []
+            let responseStr = ""
+
+            res.on("data", (chunk) => {
+                if (Buffer.isBuffer(chunk)) {
+                    responseBufs.push(chunk)
+                } else {
+                    responseStr = responseStr + chunk
+                }
+            }).on("end", () => {
+                responseStr =
+                    responseBufs.length > 0 ?
+                    Buffer.concat(responseBufs).toString("UTF-8") :
+                    responseStr
+                const obj = JSON.parse(responseStr)
+                r(obj)
+            })
+        })
+        .setTimeout(0)
+        .on("error", (error) => {
+            j(error)
+        })
+        request.write("phone=xx&message=表单已更新")
+        request.end()
+    })
+}
+
+async function task(){
+    for (p of person) {
+        const resCode = await autodk(p.id, p.pwd, p.location);
+        
+        console.log(`${p.id} -> ${resCode}`)
+        if (resCode === 513) {
+            sendMessage();
+        }
+        if (resCode === 513 || resCode === 600){
+            console.log("签到停止");
+            break;
         }
         
-        console.log(payload)
-        request.write(payload)
-        request.end()
-        temperature = (Math.random() * (37 - 36) + 36).toFixed(1)
+        await service.sleep(1000);
     }
-    //autodk()
-    for (let i=0; i<studentId.length; ++i){
-        setTimeout(()=>{
-            autodkTemperature(0,studentId[i],password[i]);
-            autodkTemperature(1,studentId[i],password[i]);
-        },i*1000);
-    }
-    let job1 = schedule.scheduleJob("00 23 08 * * *", () => { //8:23打第一次体温
-        for (let i=0; i<studentId.length; ++i){
-            setTimeout(()=>{
-                autodkTemperature(0,studentId[i],password[i]);
-            },i*1000);
-        }
-    })
-    let job2 = schedule.scheduleJob("00 06 16 * * *", () => { //16:06打第二次体温
-        for (let i=0; i<studentId.length; ++i){
-            setTimeout(()=>{
-                autodkTemperature(1,studentId[i],password[i]);
-            },i*1000);
-        }
-    })
+}
 
+(async function(){
+    task()
+    let job = schedule.scheduleJob("00 23 08 * * *", () => { //8:23打卡
+        task()
+    })
 })()
