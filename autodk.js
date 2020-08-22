@@ -5,14 +5,13 @@ const http = require("http");
 const appCode = "3" //这里是学校，根据sid来
 const person = [
     
-] // { id: "xxx", pwd: "xxx", location: ["xxx", "xxx", "xxx"] }
-// let temperature = (Math.random() * (37 - 36) + 36).toFixed(1)
+]
 
 //200 成功
 //513 有字段为空
 //514 重复交提
 //600 未到打卡时间
-async function autodk(id, pwd, location) {
+async function autodk(id, pwd, temperature) {
     const token = await service.gettoken(appCode, id, pwd);
     const themeId = await service.getThemeId(token, 0);
     const group = await service.getGroup(token, themeId);
@@ -32,7 +31,7 @@ async function autodk(id, pwd, location) {
                 },
             }
         
-            const payload = `{"bizType":"${group.bizType}","groupid":"${group.id}","value":{"whatColorIsYourHangzhouHealthCode":"greenCode","currentHealthCondition":"no","location":["${location[0]}","${location[1]}","${location[2]}"],"everBeenToInAHighRiskArea":"no"}}`
+            const payload = `{"bizType":"${group.bizType}","groupid":"${group.id}","value":{"temperature":"${temperature}","currentHealthCondition":"no","everBeenToInAHighRiskArea":"no","whatColorIsYourHangzhouHealthCode":"greenCode"}}`
             
             service.easyHttpTransport(
                 httpOptions, 
@@ -85,11 +84,12 @@ async function sendMessage(){
 
 async function task(){
     for (p of person) {
-        const resCode = await autodk(p.id, p.pwd, p.location);
+        const resCode = await autodk(p.id, p.pwd, (Math.random() * (37 - 36) + 36).toFixed(1));
         
-        console.log(`${p.id} -> ${resCode}`)
+        console.log(`${p.id} -> ${new Date()} -> ${resCode}`)
         if (resCode === 513) {
-            sendMessage();
+            const msgRet = await sendMessage();
+            console.log(msgRet);
         }
         if (resCode === 513 || resCode === 600){
             console.log("签到停止");
