@@ -84,7 +84,10 @@ async function task(payloads){
     task(conf.dkcontrol[0].payload);
 
     schedule.scheduleJob("00 00 00 * * *", () => {
-        conf = require("./setting") // 每天0点自动重载setting
+         // 每天0点自动重载setting
+        delete require.cache[require.resolve("./setting")] // 删除缓存
+        conf = require("./setting")
+
         let jobs = []
         for(control of conf.dkcontrol) {
             let time = control.time
