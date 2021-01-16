@@ -1,12 +1,18 @@
 # autocheckinXC
 学程自动打卡脚本
+> 修改自: [Gkirito/autocheckinXC](https://github.com/Gkirito/autocheckinXC)
 
 > 网页版学程[https://pa.pkqa.com.cn](https://pa.pkqa.com.cn)
+
+> 大部分情况只需要修改 `setting.js` 即可使用
+>
+> 小部分情况:
+> * 隔一天打一次卡
 
 1. 学校
 
    ``` js
-   const appCode = ""; //这里是学校，根据sid来
+   "appCode": "3", //填写学校的sid值
    ```
    
    `App-Code`就是学校代码，编号来自网页版，注意是填写`sid号`
@@ -16,52 +22,34 @@
 2. 账号密码
 
    ``` js
-   const studentId = ""; //学号
-   const password = ""; //密码
+   "person": [
+      {"id": "1890504xx", "pwd": "123456"},
+    ],
    ```
    
-账号密码为了获取token
    
 3. 打卡请求数据
 
+    与人有关的数据需要写在`person`里面
    ``` js
-   const province = ""; //省（中文）
-   const city = ""; //市（中文）
-   const district = ""; //区（中文）
+   "person": [
+      {"id": "1890504xx", "pwd": "123456", "sex": "男"},
+    ],
    ```
 
-   如果不是绿码或者对一下列项不是默认否的，请自行在代码中修改
-
-   ![image-20200422165244597](https://libget.com/gkirito/blog/image/2020/image-20200422165244597.png)
-
+    然后在payload中修改
    ``` js
-    request.write(
-               '{"bizType":"' + bizType + '","groupid":"' + groupid + '","value":[{"location":["' + province + '","' + city + '","' + district + '"],"whatColorIsYourHangzhouHealthCode":"greenCode","inWenzhouHuangyanWenlingOrPassOrContactPersonsFromTheAboveAreas":"no","inHubeiOrPassOrComeIntoContactWithPeopleFromHubei":"no","closeContactWithConfirmedOrSuspectedCases":"no","currentLifeSituation":"normalHome","currentHealthCondition":"beInGoodHealth"}]}'
-           );
-           request.end();
+    '{"sex": "${p.sex}"}',
    ```
-
-   `当然了，如果不是默认否的，不建议用脚本，还是根据自身身体情况手动打卡`
-
-脚本自动打卡时间是每天凌晨`00:01:00`
-
-可以根据自己需求修改
-
-``` js
-let job = schedule.scheduleJob("00 01 00 * * *", () => {
-        gettoken((callback) => {
-            token = callback;
-            getThemeId((themeid) => {
-                getGroupID(themeid, (groupid, bizType) => {
-                    autodk(groupid, bizType);
-                });
-            });
-        });
-    });
-```
-
-后面 `* * *`代表每天执行，`00 01 00`格式是秒 分 时
-
+4. 打卡时间
+    代表每天8:30打卡
+    ``` js
+    "dkcontrol": [
+      {
+        "time": "00 23 08 * * *",
+      }
+    ],
+    ```
 ## Centos
 
 ``` shell

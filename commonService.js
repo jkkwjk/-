@@ -1,5 +1,7 @@
 const deepCopy = require("./MemoryUtil")
-const httpTransport = require("https")
+const httpsTransport = require("https")
+const httpTransport = require("http")
+
 const responseEncoding = "utf8"
 const httpOptionsDefault = {
     hostname: "pa.pkqa.com.cn",
@@ -10,9 +12,9 @@ const httpOptionsDefault = {
     },
 }
 
-const easyHttpTransport = function (httpOptions, data) {
+const easyHttps = function (httpOptions, data) {
     return new Promise((r, j) => {
-        const request = httpTransport.request(httpOptions, res => {
+        const request = httpsTransport.request(httpOptions, res => {
             let responseBufs = []
             let responseStr = ""
 
@@ -40,10 +42,36 @@ const easyHttpTransport = function (httpOptions, data) {
         request.end()
     })
 }
-exports.easyHttpTransport = easyHttpTransport
+exports.easyHttps = easyHttps
 
-exports.sleep = function(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms))
+exports.sendMessage = async function sendMessage(httpOptions, payload){
+    return new Promise((r, j) => {
+        const request = httpTransport.request(httpOptions, res => {
+            let responseBufs = []
+            let responseStr = ""
+
+            res.on("data", (chunk) => {
+                if (Buffer.isBuffer(chunk)) {
+                    responseBufs.push(chunk)
+                } else {
+                    responseStr = responseStr + chunk
+                }
+            }).on("end", () => {
+                responseStr =
+                    responseBufs.length > 0 ?
+                    Buffer.concat(responseBufs).toString("UTF-8") :
+                    responseStr
+                const obj = JSON.parse(responseStr)
+                r(obj)
+            })
+        })
+        .setTimeout(0)
+        .on("error", (error) => {
+            j(error)
+        })
+        request.write(payload)
+        request.end()
+    })
 }
 
 exports.gettoken = async function(appCode, name, pwd) {
@@ -52,7 +80,7 @@ exports.gettoken = async function(appCode, name, pwd) {
     httpOptions.headers["App-Code"] = appCode;
 
     return new Promise((r, j) => {
-        easyHttpTransport(
+        easyHttps(
             httpOptions, 
             `{"loginName":"${name}","password":"${pwd}","type":"account"}`
         ).then(res => {
@@ -61,14 +89,18 @@ exports.gettoken = async function(appCode, name, pwd) {
     })
 }
 
-// num 代表第几个表单
+/**
+ * 
+ * @param {*} token 
+ * @param {*} num 第几个表单
+ */
 exports.getThemeId = async function(token, num) {
     let httpOptions = deepCopy(httpOptionsDefault);
     httpOptions["path"] = "/dapi/v2/form/daily_check_in_service/find_all_valid_themes_with_self";
     httpOptions.headers["Authorization"] = "Bearer " + token;
 
     return new Promise((r, j) => {
-        easyHttpTransport(
+        easyHttps(
             httpOptions, 
             `{}`
         ).then(res => {
@@ -83,7 +115,7 @@ exports.getGroup = async function(token, themeId) {
     httpOptions.headers["Authorization"] = "Bearer " + token;
 
     return new Promise((r, j) => {
-        easyHttpTransport(
+        easyHttps(
             httpOptions, 
             `{"themeId":"${themeId}","date":${new Date().getTime()}}`
         ).then(res => {
@@ -94,4 +126,14 @@ exports.getGroup = async function(token, themeId) {
             }
         }).catch(j);
     })
+}
+
+exports.log = function(msg) {
+    const timeformat = require('silly-datetime');
+    timeString = timeformat.format(new Date(), 'YYYY-MM-DD HH:mm:ss');
+    console.log(`${timeString} -> ${msg}`);
+}
+
+exports.sleep = function(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms))
 }

@@ -1,108 +1,100 @@
 const schedule = require("node-schedule")
 const service = require("./commonService")
-const http = require("http");
+let conf = require("./setting");
 
-const appCode = "3" //这里是学校，根据sid来
-const person = [
-    
-]
+/**
+* 200 成功
+* 513 有字段为空
+* 514 重复交提
+* 600 未到打卡时间
+ */
+async function autodk(p, temperature, payloadOrigin, index) {
+    try {
+        const token = await service.gettoken(conf.appCode, p.id, p.pwd);
+        const themeId = await service.getThemeId(token, index); // TODO: 如果之后的打开是多个表单的话需要修改
+        const group = await service.getGroup(token, themeId);
 
-//200 成功
-//513 有字段为空
-//514 重复交提
-//600 未到打卡时间
-async function autodk(id, pwd, temperature) {
-    const token = await service.gettoken(appCode, id, pwd);
-    const themeId = await service.getThemeId(token, 0);
-    const group = await service.getGroup(token, themeId);
-
-    return new Promise((r, j) => {
-        if (group === {}) {
-            r(600)
-        }else {
-            const httpOptions = {
-                hostname: "pa.pkqa.com.cn",
-                port: "443",
-                path: "/dapi/v2/form/daily_check_in_service/save_form_input",
-                method: "POST",
-                headers: {
-                    Authorization: "Bearer " + token,
-                    "Content-Type": "application/json; charset=utf-8",
-                },
-            }
-        
-            const payload = `{"bizType":"${group.bizType}","groupid":"${group.id}","value":{"temperature":"${temperature}","currentHealthCondition":"no","everBeenToInAHighRiskArea":"no","whatColorIsYourHangzhouHealthCode":"greenCode"}}`
-            
-            service.easyHttpTransport(
-                httpOptions, 
-                payload
-            ).then(res => {
-                r(res.code)
-            }).catch(j);
-        }
-    })
-}
-
-async function sendMessage(){
-    return new Promise((r, j) => {
-        const httpOptions = {
-            hostname: "xx",
-            port: "8080",
-            path: "/api/sendSms",
-            method: "POST",
-            headers: {
-                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-            }
-        }
-        const request = http.request(httpOptions, res => {
-            let responseBufs = []
-            let responseStr = ""
-
-            res.on("data", (chunk) => {
-                if (Buffer.isBuffer(chunk)) {
-                    responseBufs.push(chunk)
-                } else {
-                    responseStr = responseStr + chunk
+        return new Promise((r, j) => {
+            if (group === {}) {
+                r(600)
+            }else {
+                const httpOptions = {
+                    hostname: "pa.pkqa.com.cn",
+                    port: "443",
+                    path: "/dapi/v2/form/daily_check_in_service/save_form_input",
+                    method: "POST",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Content-Type": "application/json; charset=utf-8",
+                    },
                 }
-            }).on("end", () => {
-                responseStr =
-                    responseBufs.length > 0 ?
-                    Buffer.concat(responseBufs).toString("UTF-8") :
-                    responseStr
-                const obj = JSON.parse(responseStr)
-                r(obj)
-            })
+                
+                let payload = payloadOrigin
+                
+                let matchStrs = payload.match(/[$]{.+?}/g)
+                for (matchStr of matchStrs){
+                    payload = payload.replace(matchStr, eval(matchStr.substr(2, matchStr.length - 3)))
+                }
+
+                service.log("发送数据: "+ payload);
+
+                service.easyHttps(
+                    httpOptions, 
+                    payload
+                ).then(res => {
+                    r(res.code)
+                }).catch(j);
+            }
         })
-        .setTimeout(0)
-        .on("error", (error) => {
-            j(error)
-        })
-        request.write("phone=xx&message=表单已更新")
-        request.end()
-    })
+    }catch (e){
+        service.log(e)
+    }
 }
 
-async function task(){
-    for (p of person) {
-        const resCode = await autodk(p.id, p.pwd, (Math.random() * (37 - 36) + 36).toFixed(1));
-        
-        console.log(`${p.id} -> ${new Date()} -> ${resCode}`)
-        if (resCode === 513) {
-            const msgRet = await sendMessage();
-            console.log(msgRet);
+async function task(payloads){
+    for (p of conf.person) {
+        for (i in payloads) {
+            const resCode = await autodk(p, (Math.random() * (37 - 36) + 36).toFixed(1), payloads[i], i);
+
+            service.log(`${p.id} -> ${resCode}`)
+            if (resCode === 513 && conf.hostname !== undefined && conf.hostname !== "") {
+                const msgRet = await sendMessage(
+                {
+                    hostname: conf.hostname,
+                    port: conf.port,
+                    path: conf.path,
+                    method: conf.method,
+                    headers: conf.headers
+                }
+                , conf.messagePayload);
+
+                service.log(`信息发送返回: ${msgRet}`);
+            }
+            if (resCode === 513 || resCode === 600){
+                service.log("签到停止");
+                return resCode;
+            }
+            
+            await service.sleep(1000);
         }
-        if (resCode === 513 || resCode === 600){
-            console.log("签到停止");
-            break;
-        }
-        
-        await service.sleep(1000);
     }
 }
 
 (async function(){
-    task()
-    let job = schedule.scheduleJob("00 23 08 * * *", () => { //8:23打卡
-        task()
+    task(conf.dkcontrol[0].payload);
+
+    schedule.scheduleJob("00 00 00 * * *", () => {
+        conf = require("./setting") // 每天0点自动重载setting
+        let jobs = []
+        for(control of conf.dkcontrol) {
+            let time = control.time
+            jobs.push(schedule.scheduleJob(time, time, () => {
+                task(control.payload);
+
+                const jobItem = jobs.findIndex(t => t.name === time);
+                jobs[jobItem].cancel();
+                jobs.splice(jobItem, 1);
+            }))
+        }
     })
 })()
